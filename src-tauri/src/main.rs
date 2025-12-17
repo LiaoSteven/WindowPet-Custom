@@ -34,34 +34,21 @@ fn build_app() {
         .build())
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             println!("{}, {argv:?}, {cwd}", app.package_info().name);
-    
+
             app.emit_all("single-instance", Payload { args: argv, cwd })
                 .unwrap();
         }))
         .setup(move |app| {
             if let Some(window) = app.get_window("main") {
-                // Get primary monitor size for proper positioning
-                if let Ok(Some(primary_monitor)) = app.primary_monitor() {
-                    let monitor_size = primary_monitor.size();
-                    let monitor_position = primary_monitor.position();
-
-                    info!("Setting up main window with size: {}x{} at position: ({}, {})",
-                          monitor_size.width, monitor_size.height, monitor_position.x, monitor_position.y);
-
-                    // Set window size and position to cover the entire screen
-                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-                        width: monitor_size.width,
-                        height: monitor_size.height,
-                    }));
-                    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-                        x: monitor_position.x,
-                        y: monitor_position.y,
-                    }));
-                }
+                // Maximize window to cover screen
+                // This works on all platforms including macOS
+                let _ = window.maximize();
 
                 window
                     .set_ignore_cursor_events(true)
                     .unwrap_or_else(|err| println!("{:?}", err));
+
+                info!("Main window setup complete - maximized and click-through enabled");
             }
 
             conf::if_app_config_does_not_exist_create_default(app, "settings.json");
