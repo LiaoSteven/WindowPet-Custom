@@ -1,0 +1,95 @@
+name: 手动构建 macOS 版本
+
+# 允许在 GitHub 网页上手动触发构建
+on:
+  workflow_dispatch:
+    inputs:
+      build_target:
+        description: '选择构建目标'
+        required: true
+        default: 'macos-m2'
+        type: choice
+        options:
+          - macos-m2
+          - macos-intel
+          - all
+
+jobs:
+  build-macos-m2:
+    if: github.event.inputs.build_target == 'macos-m2' || github.event.inputs.build_target == 'all'
+    runs-on: macos-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 'lts/*'
+
+      - name: 安装 Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          rustup target add aarch64-apple-darwin
+
+      - name: 安装依赖并构建前端
+        run: |
+          npm install
+          npm run build
+
+      - name: 构建 macOS (Apple Silicon M2) 应用
+        run: |
+          source $HOME/.cargo/env
+          npm run tauri build -- --target aarch64-apple-darwin
+
+      - name: 上传 DMG 安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowPet-macOS-M2
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+
+      - name: 上传 APP 文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowPet-macOS-M2-APP
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+
+  build-macos-intel:
+    if: github.event.inputs.build_target == 'macos-intel' || github.event.inputs.build_target == 'all'
+    runs-on: macos-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 'lts/*'
+
+      - name: 安装 Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+
+      - name: 安装依赖并构建前端
+        run: |
+          npm install
+          npm run build
+
+      - name: 构建 macOS (Intel) 应用
+        run: |
+          source $HOME/.cargo/env
+          npm run tauri build -- --target x86_64-apple-darwin
+
+      - name: 上传 DMG 安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowPet-macOS-Intel
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+
+      - name: 上传 APP 文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowPet-macOS-Intel-APP
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
