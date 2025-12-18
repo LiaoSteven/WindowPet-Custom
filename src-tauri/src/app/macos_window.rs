@@ -1,7 +1,9 @@
 #[cfg(target_os = "macos")]
-use cocoa::appkit::{NSWindow, NSWindowCollectionBehavior};
+use cocoa::appkit::{NSWindow, NSWindowCollectionBehavior, NSBackingStoreType};
 #[cfg(target_os = "macos")]
 use cocoa::base::id;
+#[cfg(target_os = "macos")]
+use objc::{msg_send, sel, sel_impl};
 
 #[cfg(target_os = "macos")]
 use tauri::Window;
@@ -16,6 +18,18 @@ pub fn set_window_above_all(window: &Window) {
         // Using CGWindowLevelForKey(kCGMaximumWindowLevelKey) equivalent
         // This is higher than NSScreenSaverWindowLevel and will show above fullscreen
         ns_window.setLevel_(2147483631_i64);
+
+        // Fix for ghosting/trailing artifacts on macOS
+        // Enable transparency and proper compositing
+        ns_window.setOpaque_(0); // false
+        ns_window.setHasShadow_(0); // false - disable shadow to prevent artifacts
+        ns_window.setBackgroundColor_(cocoa::base::nil);
+
+        // Force window to use buffered backing store for proper refresh
+        let _: () = msg_send![ns_window, setBackingType: NSBackingStoreType::NSBackingStoreBuffered];
+
+        // Invalidate shadow to force redraw
+        let _: () = msg_send![ns_window, invalidateShadow];
 
         // Set collection behavior to appear on all spaces and above fullscreen
         let behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces

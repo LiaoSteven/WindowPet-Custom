@@ -27,6 +27,7 @@ tauri-plugin-log = { git = "https://github.com/tauri-apps/plugins-workspace", br
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.25"
+objc = "0.2"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
