@@ -40,15 +40,15 @@ fn build_app() {
         }))
         .setup(move |app| {
             if let Some(window) = app.get_window("main") {
-                // Maximize window to cover screen
-                // This works on all platforms including macOS
-                let _ = window.maximize();
-
+                // Set window to always on top and click-through
                 window
                     .set_ignore_cursor_events(true)
                     .unwrap_or_else(|err| println!("{:?}", err));
 
-                info!("Main window setup complete - maximized and click-through enabled");
+                // Ensure window is always on top
+                let _ = window.set_always_on_top(true);
+
+                info!("Main window setup complete - always on top and click-through enabled");
             }
 
             conf::if_app_config_does_not_exist_create_default(app, "settings.json");

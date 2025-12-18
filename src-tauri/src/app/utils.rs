@@ -13,7 +13,7 @@ pub async fn reopen_main_window(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     // If no window exists, create a new one
-    // Use maximized window to cover screen on all platforms including macOS
+    // Create a large transparent overlay window that stays on top
     info!("Creating main window for desktop pet");
 
     let window = WindowBuilder::new(&app, "main", WindowUrl::App("/".into()))
@@ -25,7 +25,9 @@ pub async fn reopen_main_window(app: tauri::AppHandle) -> Result<(), String> {
         .skip_taskbar(true)
         .decorations(false)
         .visible(true)
-        .maximized(true)
+        .focused(false)
+        .inner_size(3000.0, 2000.0)
+        .position(0.0, 0.0)
         .build()
         .map_err(|e| e.to_string())?;
 

@@ -72,13 +72,14 @@
         "fullscreen": false,
         "resizable": false,
         "title": "WindowPet",
-        "width": 64,
-        "height": 64,
+        "width": 3000,
+        "height": 2000,
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "decorations": false,
-        "visible": true
+        "visible": true,
+        "focus": false
       }
     ],
     "systemTray": {
