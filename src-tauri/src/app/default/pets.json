@@ -131,5 +131,48 @@
                 "frameMax": 1
             }
         }
+    },
+    {
+        "name": "Corgi",
+        "frameSize": 64,
+        "imageSrc": "media/Corgi.png",
+        "states": {
+            "idle": {
+                "spriteLine": 4,
+                "frameMax": 1
+            },
+            "walk": {
+                "spriteLine": 2,
+                "frameMax": 5
+            },
+            "sit": {
+                "spriteLine": 4,
+                "frameMax": 9
+            },
+            "greet": {
+                "spriteLine": 4,
+                "frameMax": 4
+            },
+            "crawl": {
+                "spriteLine": 7,
+                "frameMax": 8
+            },
+            "climb": {
+                "spriteLine": 8,
+                "frameMax": 8
+            },
+            "jump": {
+                "spriteLine": 5,
+                "frameMax": 5
+            },
+            "fall": {
+                "spriteLine": 6,
+                "frameMax": 8
+            },
+            "drag": {
+                "spriteLine": 1,
+                "frameMax": 11
+            }
+        }
     }
 ]
