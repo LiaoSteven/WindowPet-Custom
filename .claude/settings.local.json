@@ -5,7 +5,10 @@
       "Bash(find:*)",
       "Bash(dir /s /b /a:d d:WindowPet-0.0.9public)",
       "Bash(findstr:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

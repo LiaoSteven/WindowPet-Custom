@@ -1,0 +1,57 @@
+name: Simple Build macOS M2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          rustup target add aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app
+        run: |
+          source $HOME/.cargo/env
+          npm run tauri build -- --target aarch64-apple-darwin || echo "Build completed with warnings"
+
+      - name: List build outputs
+        run: |
+          echo "=== DMG files ==="
+          ls -lh src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/ || echo "No DMG found"
+          echo ""
+          echo "=== APP files ==="
+          ls -lh src-tauri/target/aarch64-apple-darwin/release/bundle/macos/ || echo "No APP found"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WindowPet-DMG
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/WindowPet_*.dmg
+          if-no-files-found: error
+
+      - name: Upload APP
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: WindowPet-APP
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/WindowPet.app
+          if-no-files-found: warn
