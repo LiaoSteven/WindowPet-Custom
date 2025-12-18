@@ -12,15 +12,17 @@ pub fn set_window_above_all(window: &Window) {
     unsafe {
         let ns_window = window.ns_window().unwrap() as id;
 
-        // Set window level to floating (above all normal windows)
-        // NSScreenSaverWindowLevel = 1000 (above everything except screen saver)
-        ns_window.setLevel_(1000_i64);
+        // Set window level to maximum (above fullscreen apps)
+        // Using CGWindowLevelForKey(kCGMaximumWindowLevelKey) equivalent
+        // This is higher than NSScreenSaverWindowLevel and will show above fullscreen
+        ns_window.setLevel_(2147483631_i64);
 
         // Set collection behavior to appear on all spaces and above fullscreen
         let behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle
-            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary;
+            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
+            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenDisallowsTiling;
 
         ns_window.setCollectionBehavior_(behavior);
     }
