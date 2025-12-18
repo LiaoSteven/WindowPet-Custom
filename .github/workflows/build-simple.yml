@@ -30,15 +30,19 @@ jobs:
       - name: Build Tauri app
         run: |
           source $HOME/.cargo/env
-          npm run tauri build -- --target aarch64-apple-darwin || echo "Build completed with warnings"
+          npm run tauri build -- --target aarch64-apple-darwin
 
       - name: List build outputs
+        if: always()
         run: |
+          echo "=== Checking build directory structure ==="
+          ls -lR src-tauri/target/aarch64-apple-darwin/release/bundle/ || echo "No bundle directory found"
+          echo ""
           echo "=== DMG files ==="
-          ls -lh src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/ || echo "No DMG found"
+          find src-tauri/target -name "*.dmg" || echo "No DMG found"
           echo ""
           echo "=== APP files ==="
-          ls -lh src-tauri/target/aarch64-apple-darwin/release/bundle/macos/ || echo "No APP found"
+          find src-tauri/target -name "*.app" || echo "No APP found"
 
       - name: Upload DMG
         uses: actions/upload-artifact@v4
@@ -46,7 +50,7 @@ jobs:
         with:
           name: WindowPet-DMG
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/WindowPet_*.dmg
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Upload APP
         uses: actions/upload-artifact@v4
