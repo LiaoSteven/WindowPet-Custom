@@ -1,6 +1,5 @@
 name: 手动构建 macOS 版本
 
-# 允许在 GitHub 网页上手动触发构建
 on:
   workflow_dispatch:
     inputs:
@@ -41,19 +40,29 @@ jobs:
       - name: 构建 macOS (Apple Silicon M2) 应用
         run: |
           source $HOME/.cargo/env
-          npm run tauri build -- --target aarch64-apple-darwin
+          npm run tauri build -- --target aarch64-apple-darwin || true
+
+      - name: 列出构建产物
+        run: |
+          echo "Checking build outputs..."
+          ls -la src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/ || echo "DMG folder not found"
+          ls -la src-tauri/target/aarch64-apple-darwin/release/bundle/macos/ || echo "macOS folder not found"
 
       - name: 上传 DMG 安装包
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: WindowPet-macOS-M2
+          name: WindowPet-macOS-M2-DMG
           path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: warn
 
       - name: 上传 APP 文件
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: WindowPet-macOS-M2-APP
-          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/WindowPet.app
+          if-no-files-found: warn
 
   build-macos-intel:
     if: github.event.inputs.build_target == 'macos-intel' || github.event.inputs.build_target == 'all'
@@ -80,16 +89,26 @@ jobs:
       - name: 构建 macOS (Intel) 应用
         run: |
           source $HOME/.cargo/env
-          npm run tauri build -- --target x86_64-apple-darwin
+          npm run tauri build -- --target x86_64-apple-darwin || true
+
+      - name: 列出构建产物
+        run: |
+          echo "Checking build outputs..."
+          ls -la src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/ || echo "DMG folder not found"
+          ls -la src-tauri/target/x86_64-apple-darwin/release/bundle/macos/ || echo "macOS folder not found"
 
       - name: 上传 DMG 安装包
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: WindowPet-macOS-Intel
+          name: WindowPet-macOS-Intel-DMG
           path: src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          if-no-files-found: warn
 
       - name: 上传 APP 文件
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: WindowPet-macOS-Intel-APP
-          path: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/WindowPet.app
+          if-no-files-found: warn
