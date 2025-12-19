@@ -6,5 +6,5 @@
     "allowPetClimbing": true,
     "allowAutoStartUp": false,
     "allowOverridePetScale": true,
-    "petScale": 1.2
+    "petScale": 1.0
 }
