@@ -33,12 +33,15 @@ pub fn set_window_above_all(window: &Window) {
         let _: () = msg_send![ns_window, invalidateShadow];
 
         // Set collection behavior to appear on all spaces and above fullscreen
+        // Note: Not using IgnoresCycle to ensure window can receive mouse events for drag interaction
         let behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
-            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle
             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary;
 
         ns_window.setCollectionBehavior_(behavior);
+
+        // Ensure window can receive events even at high window level
+        ns_window.setAcceptsMouseMovedEvents_(YES);
     }
 }
 
