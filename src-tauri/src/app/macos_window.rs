@@ -21,8 +21,9 @@ pub fn set_window_above_all(window: &Window) {
 
         // Fix for ghosting/trailing artifacts on macOS
         // Enable transparency and proper compositing
-        ns_window.setOpaque_(0); // false
-        ns_window.setHasShadow_(0); // false - disable shadow to prevent artifacts
+        use cocoa::base::{NO, YES};
+        ns_window.setOpaque_(NO); // false
+        ns_window.setHasShadow_(NO); // false - disable shadow to prevent artifacts
         ns_window.setBackgroundColor_(cocoa::base::nil);
 
         // Force window to use buffered backing store for proper refresh
@@ -35,8 +36,7 @@ pub fn set_window_above_all(window: &Window) {
         let behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
             | NSWindowCollectionBehavior::NSWindowCollectionBehaviorIgnoresCycle
-            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary
-            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenDisallowsTiling;
+            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary;
 
         ns_window.setCollectionBehavior_(behavior);
     }
