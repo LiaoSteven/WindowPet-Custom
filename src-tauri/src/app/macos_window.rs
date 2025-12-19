@@ -14,10 +14,10 @@ pub fn set_window_above_all(window: &Window) {
     unsafe {
         let ns_window = window.ns_window().unwrap() as id;
 
-        // Set window level to maximum (above fullscreen apps)
-        // Using CGWindowLevelForKey(kCGMaximumWindowLevelKey) equivalent
-        // This is higher than NSScreenSaverWindowLevel and will show above fullscreen
-        ns_window.setLevel_(2147483631_i64);
+        // Set window level to floating (above normal windows but below screen saver)
+        // NSFloatingWindowLevel = 3, high enough for most cases
+        // Use NSPopUpMenuWindowLevel = 101 for better compatibility
+        ns_window.setLevel_(101_i64);
 
         // Fix for ghosting/trailing artifacts on macOS
         // Enable transparency and proper compositing
