@@ -733,12 +733,12 @@ export default class Pets extends Phaser.Scene {
                 return;
         }
 
-        const random = Phaser.Math.Between(0, 2000);
+        const random = Phaser.Math.Between(0, 1000);
         if (
             pet.anims &&
             pet.anims.getName() === this.configManager.getStateName("walk", pet)
         ) {
-            if (random >= 0 && random <= 5) {
+            if (random >= 0 && random <= 10) {
                 this.switchState(pet, "idle");
                 setTimeout(() => {
                     if (
@@ -748,19 +748,19 @@ export default class Pets extends Phaser.Scene {
                     )
                         return;
                     this.switchState(pet, "walk");
-                }, Phaser.Math.Between(3000, 6000));
+                }, Phaser.Math.Between(2000, 4000));
                 return;
             }
         } else {
             // enhance random state if pet is not walk
-            if (random >= 777 && random <= 800) {
+            if (random >= 400 && random <= 450) {
                 this.playRandomState(pet);
                 return;
             }
         }
 
         // just some random number to play random state
-        if (random >= 888 && random <= 890) {
+        if (random >= 480 && random <= 490) {
             // allow random flip only after pet flipped "FLIP_DELAY" time
             if (pet.canRandomFlip) {
                 this.toggleFlipXThenUpdateDirection(pet);
@@ -771,9 +771,9 @@ export default class Pets extends Phaser.Scene {
                     pet.canRandomFlip = true;
                 }, this.FLIP_DELAY);
             }
-        } else if (random >= 777 && random <= 780) {
+        } else if (random >= 350 && random <= 365) {
             this.playRandomState(pet);
-        } else if (random >= 170 && random <= 175) {
+        } else if (random >= 100 && random <= 120) {
             this.switchState(pet, "walk");
         }
     }
