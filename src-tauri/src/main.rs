@@ -48,9 +48,6 @@ fn build_app() {
                 // Ensure window is always on top
                 let _ = window.set_always_on_top(true);
 
-                // On macOS, use native APIs to set window above all others including fullscreen apps
-                app::macos_window::set_window_above_all(&window);
-
                 info!("Main window setup complete - always on top and click-through enabled");
             }
 
