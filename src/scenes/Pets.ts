@@ -319,6 +319,22 @@ export default class Pets extends Phaser.Scene {
 
             this.randomJumpIfPetClimbAndCrawl();
         }
+
+        // Force pets to stay within screen bounds
+        this.pets.forEach((pet) => {
+            if (!pet || !pet.body) return;
+
+            const minX = this.getPetLeftPosition(pet);
+            const maxX = this.getPetRightPosition(pet);
+            const minY = this.getPetTopPosition(pet);
+            const maxY = this.getPetGroundPosition(pet);
+
+            // Clamp position to screen bounds
+            if (pet.x < minX) pet.x = minX;
+            if (pet.x > maxX) pet.x = maxX;
+            if (pet.y < minY) pet.y = minY;
+            if (pet.y > maxY) pet.y = maxY;
+        });
     }
 
     addPet(sprite: ISpriteConfig, index: number): void {
