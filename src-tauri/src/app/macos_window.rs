@@ -8,16 +8,14 @@ use objc::{msg_send, sel, sel_impl};
 #[cfg(target_os = "macos")]
 use tauri::Window;
 
-/// Set macOS window to float above all other windows including fullscreen apps
+/// Set macOS window transparency and behavior for desktop pet overlay
 #[cfg(target_os = "macos")]
 pub fn set_window_above_all(window: &Window) {
     unsafe {
         let ns_window = window.ns_window().unwrap() as id;
 
-        // Set window level to floating (above normal windows but below screen saver)
-        // NSFloatingWindowLevel = 3, high enough for most cases
-        // Use NSPopUpMenuWindowLevel = 101 for better compatibility
-        ns_window.setLevel_(101_i64);
+        // Don't set custom window level - let Tauri's alwaysOnTop handle it
+        // This prevents blocking other applications
 
         // Fix for ghosting/trailing artifacts on macOS
         // Enable transparency and proper compositing
@@ -32,15 +30,13 @@ pub fn set_window_above_all(window: &Window) {
         // Invalidate shadow to force redraw
         let _: () = msg_send![ns_window, invalidateShadow];
 
-        // Set collection behavior to appear on all spaces and above fullscreen
-        // Note: Not using IgnoresCycle to ensure window can receive mouse events for drag interaction
-        let behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
-            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
-            | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary;
+        // Set collection behavior to appear on all spaces
+        // Avoid Stationary to allow normal window behavior
+        let behavior = NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces;
 
         ns_window.setCollectionBehavior_(behavior);
 
-        // Ensure window can receive events even at high window level
+        // Ensure window can receive events for mouse detection
         ns_window.setAcceptsMouseMovedEvents_(YES);
     }
 }
