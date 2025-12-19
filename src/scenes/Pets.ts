@@ -667,11 +667,15 @@ export default class Pets extends Phaser.Scene {
     }
 
     getPetBoundLeft(pet: Pet): boolean {
-        return pet.x <= this.getPetLeftPosition(pet);
+        // Add extra margin to prevent pet from going off-screen
+        const margin = 10;
+        return pet.x <= this.getPetLeftPosition(pet) + margin;
     }
 
     getPetBoundRight(pet: Pet): boolean {
-        return pet.x >= this.getPetRightPosition(pet);
+        // Add extra margin to prevent pet from going off-screen
+        const margin = 10;
+        return pet.x >= this.getPetRightPosition(pet) - margin;
     }
 
     getPetBoundTop(pet: Pet): boolean {
