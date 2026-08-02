@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import Pets from "./scenes/Pets";
 import { useSettingStore } from "./hooks/useSettingStore";
@@ -8,18 +8,8 @@ function PhaserWrapper() {
     const phaserDom = useRef<HTMLDivElement>(null);
     const { pets } = useSettingStore();
 
-    const [screenWidth, setScreenWidth] = useState(window.screen.width);
-    const [screenHeight, setScreenHeight] = useState(window.screen.height);
-
     useEffect(() => {
         if (!phaserDom.current) return;
-
-        const handleResize = () => {
-            setScreenWidth(window.screen.width);
-            setScreenHeight(window.screen.height);
-        };
-
-        window.addEventListener("resize", handleResize);
 
         // ensure that if component remount user will still be able to touch their screen
         appWindow.setIgnoreCursorEvents(true);
@@ -33,8 +23,8 @@ function PhaserWrapper() {
             antialias: true,
             scale: {
                 mode: Phaser.Scale.ScaleModes.RESIZE,
-                width: screenWidth,
-                height: screenHeight,
+                width: window.innerWidth,
+                height: window.innerHeight,
             },
             physics: {
                 default: 'arcade',
@@ -44,7 +34,7 @@ function PhaserWrapper() {
                 },
             },
             fps: {
-                target: 30,
+                target: 60,
                 min: 30,
                 smoothStep: true,
             },
@@ -66,14 +56,22 @@ function PhaserWrapper() {
             game.destroy(true);
             // reset the dom
             if (phaserDom.current !== null) phaserDom.current.innerHTML = '';
-            window.removeEventListener("resize", handleResize);
         }
 
-    }, [pets, screenWidth, screenHeight]);
+    }, [pets]);
 
     return (
         <>
-            <div ref={phaserDom} />
+            <div
+                ref={phaserDom}
+                style={{
+                    position: "fixed",
+                    inset: 0,
+                    width: "100vw",
+                    height: "100vh",
+                    pointerEvents: "none",
+                }}
+            />
         </>
     )
 }

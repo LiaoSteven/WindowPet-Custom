@@ -1,4 +1,4 @@
-use super::conf::AppConfig;
+use super::{conf::AppConfig, macos_window};
 use log::info;
 use tauri::{Manager, WindowBuilder, WindowUrl};
 
@@ -6,9 +6,13 @@ use tauri::{Manager, WindowBuilder, WindowUrl};
 pub async fn reopen_main_window(app: tauri::AppHandle) -> Result<(), String> {
     // Check if a window with label "main" already exists
     if let Some(window) = app.get_window("main") {
-        // Bring the existing window to focus
-        window.set_focus().map_err(|e| e.to_string())?;
-        info!("Main window already exists, brought to focus");
+        // Restore the overlay without activating the app or stealing focus.
+        window
+            .set_always_on_top(true)
+            .map_err(|e| e.to_string())?;
+        macos_window::configure_window(&window);
+        window.show().map_err(|e| e.to_string())?;
+        info!("Main window already exists, restored without taking focus");
         return Ok(());
     }
 
@@ -33,6 +37,8 @@ pub async fn reopen_main_window(app: tauri::AppHandle) -> Result<(), String> {
 
     // Allow click-through window
     window.set_ignore_cursor_events(true).map_err(|e| e.to_string())?;
+    window.set_always_on_top(true).map_err(|e| e.to_string())?;
+    macos_window::configure_window(&window);
 
     info!("Reopened main window");
 

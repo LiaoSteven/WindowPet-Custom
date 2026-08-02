@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
-use app::{cmd, conf, tray, utils};
+use app::{cmd, conf, macos_window, tray, utils};
 use log::info;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -47,6 +47,7 @@ fn build_app() {
 
                 // Ensure window is always on top
                 let _ = window.set_always_on_top(true);
+                macos_window::configure_window(&window);
 
                 info!("Main window setup complete - always on top and click-through enabled");
             }

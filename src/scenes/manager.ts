@@ -149,29 +149,57 @@ export class ConfigManager {
             return [];
         }
 
-        let animationConfig = [];
-        const HighestFrameMax = this.getHighestFrameMax(sprite);
+        const animationConfig: {
+            key: string;
+            frames: Phaser.Types.Animations.AnimationFrame[];
+            frameRate: number;
+            repeat: number;
+        }[] = [];
+        const highestFrameMax = this.getHighestFrameMax(sprite);
+        const texture = this.textures?.get(sprite.name);
+        const availableFrameNames = texture
+            ? new Set(texture.getFrameNames(false))
+            : undefined;
+
         for (const state in sprite.states) {
+            const stateConfig = sprite.states[state];
             // we accept to type of state input, either start, end or spriteLine, frameMax
             // -1 because phaser frame start from 0
             const start =
-                sprite.states[state].start !== undefined
-                    ? sprite.states[state].start! - 1
-                    : (sprite.states[state].spriteLine! - 1) * HighestFrameMax;
+                stateConfig.start !== undefined
+                    ? stateConfig.start - 1
+                    : (stateConfig.spriteLine! - 1) * highestFrameMax;
             const end =
-                sprite.states[state].end !== undefined
-                    ? sprite.states[state].end! - 1
-                    : start + sprite.states[state].frameMax! - 1;
+                stateConfig.end !== undefined
+                    ? stateConfig.end - 1
+                    : start + stateConfig.frameMax! - 1;
+
+            const generatedFrames = this.anims.generateFrameNumbers(
+                sprite.name,
+                {
+                    start,
+                    end,
+                    first: start,
+                }
+            );
+            const frames = availableFrameNames
+                ? generatedFrames.filter((frame) =>
+                      frame.frame !== undefined &&
+                      availableFrameNames.has(String(frame.frame))
+                  )
+                : generatedFrames;
+
+            if (frames.length !== generatedFrames.length) {
+                console.warn(
+                    `Sprite ${sprite.name}, state ${state} references frames outside the loaded spritesheet`
+                );
+            }
+            if (frames.length === 0) continue;
 
             animationConfig.push({
                 // avoid duplicate key
                 key: `${state}-${sprite.name}`,
-                frames: this.anims.generateFrameNumbers(sprite.name, {
-                    // -1 because phaser frame start from 0
-                    start: start,
-                    end: end,
-                    first: start,
-                }),
+                frames,
                 frameRate: this.FRAME_RATE,
                 repeat: this.REPEAT,
             });
@@ -191,17 +219,13 @@ export class ConfigManager {
             return sprite.highestFrameMax;
         }
 
-        let highestFrameMax = 0;
-        for (const state in sprite.states) {
-            // if frameMax doesn't exist in sprite.states[state] maybe the user specify specific position using start, end
-            if (!sprite.states[state].frameMax!) return 0;
-            highestFrameMax = Math.max(
-                highestFrameMax,
-                sprite.states[state].frameMax!
+        const frameMaxes = Object.values(sprite.states)
+            .map((state) => state.frameMax)
+            .filter((frameMax): frameMax is number =>
+                typeof frameMax === "number" && frameMax > 0
             );
-        }
 
-        return highestFrameMax;
+        return frameMaxes.length > 0 ? Math.max(...frameMaxes) : 0;
     }
 
     public getFrameSize(sprite: ISpriteConfig): {
@@ -248,11 +272,19 @@ export class ConfigManager {
         }
 
         for (const state in sprite.states) {
-            if (
-                (!sprite.states[state].spriteLine ||
-                    !sprite.states[state].frameMax) &&
-                (!sprite.states[state].start || !sprite.states[state].end)
-            ) {
+            const stateConfig = sprite.states[state];
+            const hasGridPosition =
+                Number.isInteger(stateConfig.spriteLine) &&
+                Number.isInteger(stateConfig.frameMax) &&
+                stateConfig.spriteLine! > 0 &&
+                stateConfig.frameMax! > 0;
+            const hasExplicitRange =
+                Number.isInteger(stateConfig.start) &&
+                Number.isInteger(stateConfig.end) &&
+                stateConfig.start! > 0 &&
+                stateConfig.end! >= stateConfig.start!;
+
+            if (!hasGridPosition && !hasExplicitRange) {
                 // error(`Invalid sprite config: ${sprite.name}`);
                 return false;
             }

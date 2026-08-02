@@ -22,12 +22,16 @@ interface Pet extends Phaser.Types.Physics.Arcade.SpriteWithDynamicBody {
     canPlayRandomState: boolean;
     canRandomFlip: boolean;
     id: string;
+    timers?: Phaser.Time.TimerEvent[];
+    activeTween?: Phaser.Tweens.Tween;
+    fallCompleteHandler?: (...args: any[]) => void;
 }
 
 export default class Pets extends Phaser.Scene {
     private pets: Pet[] = [];
-    private isFlipped: boolean = false;
     private frameCount: number = 0;
+    private settingUnlisten?: () => void;
+    private settingListenerCancelled: boolean = false;
     // use this array to store index of pet that is currently climb and crawl
     private petClimbAndCrawlIndex: number[] = [];
 
@@ -98,8 +102,10 @@ export default class Pets extends Phaser.Scene {
     }
 
     create(): void {
+        this.settingListenerCancelled = false;
         this.inputManager.turnOnIgnoreCursorEvents();
         this.physics.world.setBoundsCollision(true, true, true, true);
+        this.scale.on("resize", this.handleScaleResize, this);
         this.updatePetAboveTaskbar();
 
         // check all loaded sprite (debug only)
@@ -116,8 +122,8 @@ export default class Pets extends Phaser.Scene {
         this.input.on(
             "drag",
             (pointer: any, pet: Pet, dragX: number, dragY: number) => {
-                pet.x = dragX;
-                pet.y = dragY;
+                this.stopPetTween(pet);
+                pet.setPosition(dragX, dragY);
 
                 if (
                     pet.anims &&
@@ -131,69 +137,64 @@ export default class Pets extends Phaser.Scene {
                 // @ts-ignore
                 if (pet.body!.enable) pet.body!.enable = false;
 
-                // if current pet x is greater than drag start x, flip the pet to the right
+                // Keep each pet's facing direction independent from other pets.
                 if (pet.x > pet.input!.dragStartX) {
-                    if (this.isFlipped) {
-                        this.toggleFlipX(pet);
-                        this.isFlipped = false;
-                    }
-                } else {
-                    if (!this.isFlipped) {
-                        this.toggleFlipX(pet);
-                        this.isFlipped = true;
-                    }
+                    this.setPetLookToTheLeft(pet, false);
+                } else if (pet.x < pet.input!.dragStartX) {
+                    this.setPetLookToTheLeft(pet, true);
                 }
             }
         );
 
         this.input.on("dragend", (pointer: any, pet: Pet) => {
+            this.stopPetTween(pet);
+            const targetPosition = this.getClampedPetPosition(
+                pet,
+                pet.x + pointer.velocity.x * this.TWEEN_ACCELERATION,
+                pet.y + pointer.velocity.y * this.TWEEN_ACCELERATION
+            );
+
             // add tween effect when drag end for smooth throw effect
-            this.tweens.add({
+            const tween = this.tweens.add({
                 targets: pet,
-                // x and y is the position of the pet when drag end
-                x: pet.x + pointer.velocity.x * this.TWEEN_ACCELERATION,
-                y: pet.y + pointer.velocity.y * this.TWEEN_ACCELERATION,
+                x: targetPosition.x,
+                y: targetPosition.y,
                 duration: 600,
                 ease: Ease.QuartEaseOut,
                 onComplete: () => {
-                    // enable collision when dragging end so that collision will work again and pet go back to the screen
-                    if (!pet.body!.enable) {
-                        pet.body!.enable = true;
+                    pet.activeTween = undefined;
+                    if (!pet.active || !pet.body) return;
 
-                        // not sure why when enabling body, velocity become 0, and need to take a while to update velocity
-                        setTimeout(() => {
-                            switch (pet.anims.getName()) {
-                                case this.configManager.getStateName(
-                                    "climb",
-                                    pet
-                                ):
-                                    this.updateDirection(pet, Direction.UP);
-                                    break;
-                                case this.configManager.getStateName(
-                                    "crawl",
-                                    pet
-                                ):
-                                    this.updateDirection(
-                                        pet,
-                                        pet.scaleX === -1
-                                            ? Direction.UPSIDELEFT
-                                            : Direction.UPSIDERIGHT
-                                    );
-                                    break;
-                                default:
-                                    return;
-                            }
-                        }, 50);
-                    }
+                    this.clampPetToWorld(pet, false);
+                    pet.body.enable = true;
+                    pet.body.updateFromGameObject();
+
+                    // Body state is updated on the next physics step. Delay only
+                    // the direction restore, not the boundary correction.
+                    this.schedulePetTimer(pet, 50, () => {
+                        if (!pet.anims) return;
+                        switch (pet.anims.getName()) {
+                            case this.configManager.getStateName("climb", pet):
+                                this.updateDirection(pet, Direction.UP);
+                                break;
+                            case this.configManager.getStateName("crawl", pet):
+                                this.updateDirection(
+                                    pet,
+                                    pet.scaleX < 0
+                                        ? Direction.UPSIDELEFT
+                                        : Direction.UPSIDERIGHT
+                                );
+                                break;
+                        }
+                    });
+
+                    this.petBeyondScreenSwitchClimb(
+                        pet,
+                        this.getPetWorldBounding(pet)
+                    );
                 },
             });
-
-            this.petBeyondScreenSwitchClimb(pet, {
-                up: this.getPetBoundTop(pet),
-                down: this.getPetBoundDown(pet),
-                left: this.getPetBoundLeft(pet),
-                right: this.getPetBoundRight(pet),
-            });
+            pet.activeTween = tween;
         });
 
         this.physics.world.on(
@@ -206,6 +207,7 @@ export default class Pets extends Phaser.Scene {
                 right: boolean
             ) => {
                 const pet = body.gameObject as Pet;
+                if (!pet || !pet.active) return;
                 // if crawl to world bounds, we make the pet jump or spawn on the ground
                 if (
                     pet.anims &&
@@ -303,16 +305,24 @@ export default class Pets extends Phaser.Scene {
                         break;
                 }
             }
-        );
+        ).then((unlisten) => {
+            if (this.settingListenerCancelled) {
+                unlisten();
+            } else {
+                this.settingUnlisten = unlisten;
+            }
+        }).catch((err) => error(err));
 
         info("Pets scene loaded");
     }
 
     update(time: number, delta: number): void {
-        this.frameCount += delta;
+        // Keep the remainder so the 9 Hz behavior does not drift when the
+        // Phaser loop runs at 60 Hz or when frame times are uneven.
+        this.frameCount += Math.min(delta, 250);
 
         if (this.frameCount >= this.UPDATE_DELAY) {
-            this.frameCount = 0;
+            this.frameCount %= this.UPDATE_DELAY;
             if (this.allowPetInteraction) {
                 this.inputManager.checkIsMouseInOnPet();
             }
@@ -322,27 +332,106 @@ export default class Pets extends Phaser.Scene {
 
         // Force pets to stay within screen bounds
         this.pets.forEach((pet) => {
-            if (!pet || !pet.body) return;
-
-            const minX = this.getPetLeftPosition(pet);
-            const maxX = this.getPetRightPosition(pet);
-            const minY = this.getPetTopPosition(pet);
-            const maxY = this.getPetGroundPosition(pet);
-
-            // Clamp position to screen bounds
-            if (pet.x < minX) pet.x = minX;
-            if (pet.x > maxX) pet.x = maxX;
-            if (pet.y < minY) pet.y = minY;
-            if (pet.y > maxY) pet.y = maxY;
+            // Dragging and the controlled jump tween intentionally run with
+            // the body disabled. Their final position is clamped on release.
+            if (!pet || !pet.body || !pet.body.enable) return;
+            this.clampPetToWorld(pet);
         });
+    }
+
+    private handleScaleResize = (): void => {
+        this.updatePetAboveTaskbar();
+        this.pets.forEach((pet) => this.clampPetToWorld(pet, false));
+    };
+
+    private schedulePetTimer(
+        pet: Pet,
+        delay: number,
+        callback: () => void
+    ): Phaser.Time.TimerEvent {
+        let timer: Phaser.Time.TimerEvent;
+        timer = this.time.delayedCall(delay, () => {
+            pet.timers = pet.timers?.filter((item) => item !== timer);
+            if (pet.active) callback();
+        });
+        pet.timers = [...(pet.timers ?? []), timer];
+        return timer;
+    }
+
+    private stopPetTween(pet: Pet): void {
+        if (pet.activeTween) {
+            pet.activeTween.stop();
+            pet.activeTween = undefined;
+        }
+    }
+
+    private clearPetAsyncState(pet: Pet): void {
+        pet.timers?.forEach((timer) => timer.remove(false));
+        pet.timers = [];
+        this.stopPetTween(pet);
+
+        if (pet.fallCompleteHandler && pet.anims) {
+            const fallKey = this.configManager.getStateName("fall", pet);
+            pet.off(
+                `animationcomplete-${fallKey}`,
+                pet.fallCompleteHandler
+            );
+            pet.fallCompleteHandler = undefined;
+        }
+    }
+
+    private getClampedPetPosition(
+        pet: Pet,
+        x: number,
+        y: number
+    ): { x: number; y: number } {
+        const minX = this.getPetLeftPosition(pet);
+        const maxX = Math.max(minX, this.getPetRightPosition(pet));
+        const minY = this.getPetTopPosition(pet);
+        const maxY = Math.max(minY, this.getPetGroundPosition(pet));
+
+        return {
+            x: Phaser.Math.Clamp(x, minX, maxX),
+            y: Phaser.Math.Clamp(y, minY, maxY),
+        };
+    }
+
+    private clampPetToWorld(pet: Pet, stopMovement: boolean = true): void {
+        if (!pet || !pet.body) return;
+
+        const position = this.getClampedPetPosition(pet, pet.x, pet.y);
+        const changed = position.x !== pet.x || position.y !== pet.y;
+
+        if (!changed) return;
+
+        pet.setPosition(position.x, position.y);
+        pet.body.updateFromGameObject();
+        if (stopMovement) pet.setVelocity(0, 0);
+    }
+
+    private getPetWorldBounding(pet: Pet): IWorldBounding {
+        return {
+            up: this.getPetBoundTop(pet),
+            down: this.getPetBoundDown(pet),
+            left: this.getPetBoundLeft(pet),
+            right: this.getPetBoundRight(pet),
+        };
+    }
+
+    shutdown(): void {
+        this.settingListenerCancelled = true;
+        this.settingUnlisten?.();
+        this.settingUnlisten = undefined;
+        this.scale.off("resize", this.handleScaleResize, this);
+        this.pets.forEach((pet) => this.clearPetAsyncState(pet));
     }
 
     addPet(sprite: ISpriteConfig, index: number): void {
         this.configManager.registerSpriteStateAnimation(sprite);
 
         const randomX = Phaser.Math.Between(
-            100,
-            this.physics.world.bounds.width - 100
+            0,
+            Math.max(0, this.physics.world.bounds.width)
         );
         // make the pet jump from the top of the screen
         const petY = 0 + this.configManager.getFrameSize(sprite).frameHeight;
@@ -357,6 +446,7 @@ export default class Pets extends Phaser.Scene {
             ? this.scalePet(this.pets[index], this.petScale)
             : this.scalePet(this.pets[index], defaultSettings.petScale);
 
+        this.clampPetToWorld(this.pets[index], false);
         this.pets[index].setCollideWorldBounds(true, 0, 0, true);
 
         // store available states to pet (it actual name, not modified name)
@@ -371,6 +461,7 @@ export default class Pets extends Phaser.Scene {
     removePet(petId: string): void {
         this.pets = this.pets.filter((pet: Pet, index: number) => {
             if (pet.id === petId) {
+                this.clearPetAsyncState(pet);
                 pet.destroy();
 
                 // get pet that use the same texture as the pet that is destroyed
@@ -500,7 +591,7 @@ export default class Pets extends Phaser.Scene {
         }
     ): void {
         try {
-            // when pet is destroyed, pet.anims will be undefined, there is a chance that this function get called because of setTimeout
+            // Delayed callbacks can run after a pet has been removed.
             if (!pet.anims) return;
 
             // prevent pet from playing crawl and climb state if allowPetClimbing is false
@@ -512,6 +603,15 @@ export default class Pets extends Phaser.Scene {
             // if current state is the same as the new state, do nothing
             if (pet.anims && pet.anims.getName() === animationKey) return;
             if (!pet.availableStates.includes(state)) return;
+
+            if (state !== "fall" && pet.fallCompleteHandler) {
+                const fallKey = this.configManager.getStateName("fall", pet);
+                pet.off(
+                    `animationcomplete-${fallKey}`,
+                    pet.fallCompleteHandler
+                );
+                pet.fallCompleteHandler = undefined;
+            }
 
             pet.anims.play({
                 key: animationKey,
@@ -553,6 +653,7 @@ export default class Pets extends Phaser.Scene {
         const scaleX = pet.scaleX > 0 ? scaleValue : -scaleValue;
         const scaleY = pet.scaleY > 0 ? scaleValue : -scaleValue;
         pet.setScale(scaleX, scaleY);
+        this.clampPetToWorld(pet, false);
     }
 
     scaleAllPets(scaleValue: number): void {
@@ -597,20 +698,17 @@ export default class Pets extends Phaser.Scene {
     }
 
     getOneRandomState(pet: Pet): string {
-        let randomStateIndex;
-
-        do {
-            randomStateIndex = Phaser.Math.Between(
-                0,
-                pet.availableStates.length - 1
-            );
-        } while (
-            this.FORBIDDEN_RAND_STATE.includes(
-                pet.availableStates[randomStateIndex]
-            )
+        const availableRandomStates = pet.availableStates.filter(
+            (state) => !this.FORBIDDEN_RAND_STATE.includes(state)
         );
 
-        return pet.availableStates[randomStateIndex];
+        if (availableRandomStates.length === 0) {
+            return pet.availableStates[0] ?? "stand";
+        }
+
+        return availableRandomStates[
+            Phaser.Math.Between(0, availableRandomStates.length - 1)
+        ];
     }
 
     getOneRandomStateByPet(pet: Pet): string {
@@ -624,9 +722,9 @@ export default class Pets extends Phaser.Scene {
         pet.canPlayRandomState = false;
 
         // add delay to prevent spamming random state too fast
-        setTimeout(() => {
+        this.schedulePetTimer(pet, this.RAND_STATE_DELAY, () => {
             pet.canPlayRandomState = true;
-        }, this.RAND_STATE_DELAY);
+        });
     }
 
     // this function is for when pet jump to the ground, it will call every time pet hit the ground
@@ -645,10 +743,23 @@ export default class Pets extends Phaser.Scene {
 
             // after fall animation complete, we play random state
             pet.canPlayRandomState = false;
-            pet.on("animationcomplete", () => {
+            const fallKey = this.configManager.getStateName("fall", pet);
+            if (pet.fallCompleteHandler) {
+                pet.off(
+                    `animationcomplete-${fallKey}`,
+                    pet.fallCompleteHandler
+                );
+            }
+
+            pet.fallCompleteHandler = () => {
+                pet.fallCompleteHandler = undefined;
                 pet.canPlayRandomState = true;
                 this.playRandomState(pet);
-            });
+            };
+            pet.once(
+                `animationcomplete-${fallKey}`,
+                pet.fallCompleteHandler
+            );
 
             return;
         }
@@ -658,22 +769,22 @@ export default class Pets extends Phaser.Scene {
     getPetGroundPosition(pet: Pet): number {
         return (
             this.physics.world.bounds.height -
-            pet.height * Math.abs(pet.scaleY) * pet.originY
+            pet.displayHeight * pet.originY
         );
     }
 
     getPetTopPosition(pet: Pet): number {
-        return pet.height * Math.abs(pet.scaleY) * pet.originY;
+        return pet.displayHeight * pet.originY;
     }
 
     getPetLeftPosition(pet: Pet): number {
-        return pet.width * Math.abs(pet.scaleX) * pet.originX;
+        return pet.displayWidth * pet.originX;
     }
 
     getPetRightPosition(pet: Pet): number {
         return (
             this.physics.world.bounds.width -
-            pet.width * Math.abs(pet.scaleX) * pet.originX
+            pet.displayWidth * pet.originX
         );
     }
 
@@ -699,27 +810,31 @@ export default class Pets extends Phaser.Scene {
     }
 
     updatePetAboveTaskbar(): void {
-        if (this.allowPetAboveTaskbar) {
-            // get taskbar height
-            const taskbarHeight =
-                window.screen.height - window.screen.availHeight;
-
-            // update world bounds to include task bar
-            this.physics.world.setBounds(
-                0,
-                0,
-                window.screen.width,
-                window.screen.height - taskbarHeight
-            );
-            return;
-        }
+        const worldWidth = Math.max(1, this.scale.width || window.innerWidth);
+        const worldHeight = Math.max(1, this.scale.height || window.innerHeight);
+        const screenHeight = Math.max(1, window.screen.height || worldHeight);
+        const availableHeight = Math.max(
+            1,
+            window.screen.availHeight || screenHeight
+        );
+        const availableRatio = Math.min(1, availableHeight / screenHeight);
+        const height = this.allowPetAboveTaskbar
+            ? worldHeight
+            : Math.max(1, worldHeight * availableRatio);
 
         this.physics.world.setBounds(
             0,
             0,
-            window.screen.width,
-            window.screen.height
+            worldWidth,
+            height
         );
+        this.clampAllPets();
+    }
+
+    private clampAllPets(): void {
+        this.pets.forEach((pet) => {
+            if (pet?.body?.enable) this.clampPetToWorld(pet);
+        });
     }
 
     petJumpOrPlayRandomState(pet: Pet): void {
@@ -755,16 +870,26 @@ export default class Pets extends Phaser.Scene {
             pet.anims.getName() === this.configManager.getStateName("walk", pet)
         ) {
             if (random >= 0 && random <= 10) {
-                this.switchState(pet, "idle");
-                setTimeout(() => {
-                    if (
-                        pet.anims &&
-                        pet.anims.getName() !==
-                            this.configManager.getStateName("idle", pet)
-                    )
-                        return;
-                    this.switchState(pet, "walk");
-                }, Phaser.Math.Between(2000, 4000));
+                const idleState = pet.availableStates.includes("idle")
+                    ? "idle"
+                    : pet.availableStates.includes("stand")
+                        ? "stand"
+                        : undefined;
+                if (!idleState) return;
+
+                this.switchState(pet, idleState);
+                this.schedulePetTimer(
+                    pet,
+                    Phaser.Math.Between(2000, 4000),
+                    () => {
+                        if (
+                            pet.anims &&
+                            pet.anims.getName() !==
+                                this.configManager.getStateName(idleState, pet)
+                        ) return;
+                        this.switchState(pet, "walk");
+                    }
+                );
                 return;
             }
         } else {
@@ -783,9 +908,9 @@ export default class Pets extends Phaser.Scene {
                 pet.canRandomFlip = false;
 
                 // add delay to prevent spamming pet flip too fast
-                setTimeout(() => {
+                this.schedulePetTimer(pet, this.FLIP_DELAY, () => {
                     pet.canRandomFlip = true;
-                }, this.FLIP_DELAY);
+                });
             }
         } else if (random >= 350 && random <= 365) {
             this.playRandomState(pet);
@@ -811,7 +936,10 @@ export default class Pets extends Phaser.Scene {
             const random = Phaser.Math.Between(0, 500);
 
             if (random === 78) {
-                let newPetx = pet.x;
+                const minX = this.getPetLeftPosition(pet);
+                const maxX = Math.max(minX, this.getPetRightPosition(pet));
+                const currentX = Phaser.Math.Clamp(pet.x, minX, maxX);
+                let newPetx = currentX;
                 // if pet climb, I want the pet to have some opposite x direction when jump
                 if (
                     pet.anims &&
@@ -821,30 +949,34 @@ export default class Pets extends Phaser.Scene {
                     // if pet.scaleX is negative, it means pet is facing left, vice versa
                     newPetx =
                         pet.scaleX < 0
-                            ? Phaser.Math.Between(pet.x, 500)
+                            ? Phaser.Math.Between(minX, currentX)
                             : Phaser.Math.Between(
-                                  pet.x,
-                                  this.physics.world.bounds.width - 500
+                                  currentX,
+                                  maxX
                               );
                 }
 
                 // disable body to prevent shaking when jump
                 if (pet.body!.enable) pet.body!.enable = false;
+                this.stopPetTween(pet);
                 this.switchState(pet, "jump");
                 // use tween animation to make jump more smooth
-                this.tweens.add({
+                const tween = this.tweens.add({
                     targets: pet,
                     x: newPetx,
                     y: this.getPetGroundPosition(pet),
                     duration: 3000,
                     ease: Ease.QuadEaseOut,
                     onComplete: () => {
-                        if (!pet.body!.enable) {
-                            pet.body!.enable = true;
-                            this.switchStateAfterPetJump(pet);
-                        }
+                        pet.activeTween = undefined;
+                        if (!pet.active || !pet.body) return;
+                        this.clampPetToWorld(pet, false);
+                        pet.body.enable = true;
+                        pet.body.updateFromGameObject();
+                        this.switchStateAfterPetJump(pet);
                     },
                 });
+                pet.activeTween = tween;
                 return;
             }
 
@@ -859,12 +991,21 @@ export default class Pets extends Phaser.Scene {
                     this.updateDirection(pet, Direction.UNKNOWN);
                     // @ts-ignore
                     pet.body!.allowGravity = false;
-                    setTimeout(() => {
-                        if (pet.anims && !pet.anims.isPlaying) {
+                    this.schedulePetTimer(
+                        pet,
+                        Phaser.Math.Between(3000, 6000),
+                        () => {
+                        if (
+                            pet.anims &&
+                            pet.anims.getName() ===
+                                this.configManager.getStateName("climb", pet) &&
+                            !pet.anims.isPlaying
+                        ) {
                             pet.anims.resume();
                             this.updateDirection(pet, Direction.UP);
                         }
-                    }, Phaser.Math.Between(3000, 6000));
+                        }
+                    );
                     return;
                 } else if (
                     pet.anims &&
@@ -876,8 +1017,16 @@ export default class Pets extends Phaser.Scene {
                     this.updateDirection(pet, Direction.UNKNOWN);
                     // @ts-ignore
                     pet.body!.allowGravity = false;
-                    setTimeout(() => {
-                        if (pet.anims && !pet.anims.isPlaying) {
+                    this.schedulePetTimer(
+                        pet,
+                        Phaser.Math.Between(3000, 6000),
+                        () => {
+                        if (
+                            pet.anims &&
+                            pet.anims.getName() ===
+                                this.configManager.getStateName("crawl", pet) &&
+                            !pet.anims.isPlaying
+                        ) {
                             pet.anims.resume();
                             // if pet.scaleX is negative, it means pet is facing up side left, vice versa
                             this.updateDirection(
@@ -887,7 +1036,8 @@ export default class Pets extends Phaser.Scene {
                                     : Direction.UPSIDERIGHT
                             );
                         }
-                    }, Phaser.Math.Between(3000, 6000));
+                        }
+                    );
                     return;
                 }
             }
@@ -895,7 +1045,7 @@ export default class Pets extends Phaser.Scene {
     }
 
     petBeyondScreenSwitchClimb(pet: Pet, worldBounding: IWorldBounding): void {
-        if (!pet) return;
+        if (!pet || !pet.anims) return;
 
         // if pet is climb and crawl, we don't want to switch state again
         switch (pet.anims.getName()) {
@@ -915,28 +1065,19 @@ export default class Pets extends Phaser.Scene {
             ) {
                 this.switchState(pet, "climb");
 
-                const lastPetX = pet.x;
-                // const lastPetX = pet.x + pet.width * Math.abs(pet.scaleX) * pet.originX;
-                if (worldBounding.left) {
-                    /*
-                     * not quite sure if this is correct, but after a lot of experiment
-                     * i found out that the pet will be stuck at the left side of the screen
-                     * which will result in pet.x = negative number. Because we disable and enable
-                     * pet body when drag, the pet will go back with absolute value of pet.x
-                     * so i get lastPetX to minus with petLeftPosition to get the correct position
-                     */
-                    pet.setPosition(
-                        lastPetX - this.getPetLeftPosition(pet),
-                        pet.y
-                    );
-                    this.setPetLookToTheLeft(pet, true);
-                } else {
-                    pet.setPosition(
-                        lastPetX + this.getPetRightPosition(pet),
-                        pet.y
-                    );
-                    this.setPetLookToTheLeft(pet, false);
-                }
+                const edgeX = worldBounding.left
+                    ? this.getPetLeftPosition(pet)
+                    : this.getPetRightPosition(pet);
+                const edgeY = Phaser.Math.Clamp(
+                    pet.y,
+                    this.getPetTopPosition(pet),
+                    this.getPetGroundPosition(pet)
+                );
+                pet.setPosition(edgeX, edgeY);
+                pet.body.updateFromGameObject();
+                worldBounding.left
+                    ? this.setPetLookToTheLeft(pet, true)
+                    : this.setPetLookToTheLeft(pet, false);
             } else {
                 if (worldBounding.down) {
                     // if pet on the ground and beyond screen and doesn't have climb state, we flip the pet
